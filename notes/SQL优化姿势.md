@@ -739,7 +739,29 @@ where status = 1 and create_time between '2020-09-02 10:00:00' and '2020-10-01 1
 
 在MySQL中不建议使用Left Join，即使ON过滤条件列索引，一些情况也不会走索引，导致大量的数据行被扫描，SQL性能变得很差，同时要清楚ON和Where的区别。
 
+**为什么不建议使用Left Join？**
 
+1. 使用join语句，性能比强行拆成多个单表执行SQL语句的性能要好；
+2. 如果使用join语句的话，需要让小表做驱动表（大表做驱动表对扫描行数的影响很大）。
+
+但是，你需要注意，这个结论的前提是“可以使用被驱动表的索引”。
+
+第一个问题：**能不能使用join语句**？
+
+如果可以使用Index Nested-Loop Join算法，也就是说可以用上被驱动表上的索引，其实是没问题的；
+
+如果使用Block Nested-Loop Join算法，扫描行数就会过多。尤其是在大表上的join操作，这样可能要扫描被驱动表很多次，会占用大量的系统资源。所以这种join尽量不要用。
+
+所以你在判断要不要使用join语句时，就是看explain结果里面，Extra字段里面有没有出现“Block Nested Loop”字样。
+
+第二个问题是：**如果要使用join，应该选择大表做驱动表还是选择小表做驱动表**？
+
+如果是Index Nested-Loop Join算法，应该选择小表做驱动表；
+
+如果是Block Nested-Loop Join算法：
+
+在join_buffer_size足够大的时候，是一样的；
+在join_buffer_size不够大的时候（这种情况更常见），应该选择小表做驱动表。
 
 ###### 子查询
 

@@ -1598,9 +1598,50 @@ where university="浙江大学"
 - **平均答题数量**：在每个学校的分组内，用总答题数量除以总人数即可得到平均答题数量`count(question_id) / count(distinct device_id)`。--->**通过表达式计算得到结果**
 - 表连接：学校和答题信息在不同的表，需要做连接
 
+#### 组合查询
 
+##### **查找山东大学或者性别为男生的信息**
 
+题目：现在运营想要分别查看学校为山东大学或者性别为男性的用户的device_id、gender、age和gpa数据，请取出相应结果，结果不去重。
 
+示例：user_profile
+
+| id   | device_id | gender | age  | university | gpa  | active_days_within_30 | question_cnt | answer_cnt |
+| ---- | --------- | ------ | ---- | ---------- | ---- | --------------------- | ------------ | ---------- |
+| 1    | 2138      | male   | 21   | 北京大学   | 3.4  | 7                     | 2            | 12         |
+| 2    | 3214      | male   |      | 复旦大学   | 4    | 15                    | 5            | 25         |
+| 3    | 6543      | female | 20   | 北京大学   | 3.2  | 12                    | 3            | 30         |
+| 4    | 2315      | female | 23   | 浙江大学   | 3.6  | 5                     | 1            | 2          |
+| 5    | 5432      | male   | 25   | 山东大学   | 3.8  | 20                    | 15           | 70         |
+| 6    | 2131      | male   | 28   | 山东大学   | 3.3  | 15                    | 7            | 13         |
+| 7    | 4321      | male   | 26   | 复旦大学   | 3.6  | 9                     | 6            | 52         |
+
+根据示例，你的查询应返回以下结果（注意输出的顺序，先输出学校为山东大学再输出性别为男生的信息）：
+
+| device_id | gender | age  | gpa  |
+| --------- | ------ | ---- | ---- |
+| 5432      | male   | 25   | 3.8  |
+| 2131      | male   | 28   | 3.3  |
+| 2138      | male   | 21   | 3.4  |
+| 3214      | male   | None | 4    |
+| 5432      | male   | 25   | 3.8  |
+| 2131      | male   | 28   | 3.3  |
+| 4321      | male   | 28   | 3.6  |
+
+```sql
+# 直接用union也不行，要用union all(不去重)
+select 
+    device_id, gender, age, gpa
+from user_profile
+where university='山东大学'
+
+union all
+
+select 
+    device_id, gender, age, gpa
+from user_profile
+where gender='male'
+```
 
 
 
