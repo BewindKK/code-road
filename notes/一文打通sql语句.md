@@ -431,6 +431,7 @@ c. WHERE 子句
             in (not) null, (not) like（%代表任意字符，"_"代表单个字符）, (not) in(确定选择), (not) between and, is (not), and, or, not, xor
             is/is not 加上ture/false/unknown，检验某个值的真假
             <=>与<>功能相同，<=>可用于null比较
+    -- where子句中不能使用聚集函数作为表达式，可以用having实现
 d. GROUP BY 子句, 分组子句
     GROUP BY 字段/别名 [排序方式]
     分组后会进行排序。升序：ASC，降序：DESC
@@ -702,27 +703,76 @@ mysqldump [options] --all--database
 ```mysql
 什么是视图：
     视图是一个虚拟表，其内容由查询定义。同真实的表一样，视图包含一系列带有名称的列和行数据。但是，视图并不在数据库中以存储的数据值集形式存在。行和列数据来自由定义视图的查询所引用的表，并且在引用视图时动态生成。
+    
     视图具有表结构文件，但不存在数据文件。
+    
     对其中所引用的基础表来说，视图的作用类似于筛选。定义视图的筛选可以来自当前或其它数据库的一个或多个表，或者其它视图。通过视图进行查询没有任何限制，通过它们进行数据修改时的限制也很少。
+    
+    视图一经定义，就可以和基本表一样被查询、被删除。也可以在一个视图上定义新的视图，但对视图的更新有一定的限制
+    
     视图是存储在数据库中的查询的sql语句，它主要出于两种原因：安全原因，视图可以隐藏一些数据，如：社会保险基金表，可以用视图只显示姓名，地址，而不显示社会保险号和工资数等，另一原因是可使复杂的查询易于理解和使用。
 -- 创建视图
-CREATE [OR REPLACE] [ALGORITHM = {UNDEFINED | MERGE | TEMPTABLE}] VIEW view_name [(column_list)] AS select_statement
+CREATE [OR REPLACE] [ALGORITHM = {UNDEFINED | MERGE | TEMPTABLE}] VIEW view_name [(column_list，指定列名)] AS select_statement(子查询) [WITH CHECK OPTION]
     - 视图名必须唯一，同时不能与表重名。
+    - 带有聚集函数和GROUP BY子句的查询来定义视图，这种视图称为分组视图
     - 视图可以使用select语句查询到的列名，也可以自己指定相应的列名。
     - 可以指定视图执行的算法，通过ALGORITHM指定。
     - column_list如果存在，则数目必须等于SELECT语句检索的列数
+    - 属性列名或者全部指定或者全部省略。如果省略，则隐含该视图由子查询中select子句目标列中的字段构成
+    	明确指定所有列名
+    	1. 某个目标列不是单纯的属性名，而是聚集函数或列表达式
+    	2. 多表连接时选出了几个同名列作为视图的字段
+    	3. 需要在视图中为某个列启用新的更合适的名字。
+    - 执行CREATE VIEW语句的结果只是把视图的定义存入数据字典，并不执行其中的SELECT语句。只是在对视图查询时，才按视图的定义从基本表中将数据查出
+    - WITH CHECK OPTION表示对视图进行UPDATE、INSERT 和DELETE操作时要保证更新、插入或删除的行满足视图定义中的谓词条件(即子查询中的条件表达式)。
+    	例：CREATE VIEW IS_ Student
+    		AS
+    		SELECT Sno,Sname,Sage
+    		FROM Student
+    		WHERE Sdept='IS'
+    		WITH CHECK OPTION;
+    	由于在定义IS_ Student 视图时加上了WITH CHECK OPTION子句，以后对该视图进行插入、修改和删除操作时，关系数据库管理系统会自动加上Sdept=IS'的条件。
 -- 查看结构
     SHOW CREATE VIEW view_name
+-- 查询视图
+	视图定义后，用户就可以像对基本表一样对视图进行查询了
+	eg:
+		SELECT Sno,Sage
+		FROM IS_Student
+		WHERE Sage<20;
+	关系数据库管理系统执行对视图的查询时，首先进行有效性检查，检查查询中涉及的表、视图等是否存在。
+	存在则取出视图的定义，把子查询与用户查询结合起来，转换成等价对基本表的查询，然后执行--->视图消解
+-- 更新视图
+	对视图的更新最终要转换为对基本表的更新
+	为防止用户对不属于视图的范围内进行操作可以加上WITH CHECK OPTION，在更新的时候要满足视图条件
+	-- 插入
+		INSERT INTO table_name ( field1, field2,...fieldN )
+                       VALUES
+                       ( value1, value2,...valueN );
+        和对基本表的操作相同，只不过表名是视图表名
+    -- 删除
+    	delete
+    	
+    在关系数据库中，并不是所有的视图都是可更新的，因为有些视图的更新不能唯一地有意义地转换成对相应基本表的更新。
+    一般地，行列子集视图是可更新的
 -- 删除视图
     - 删除视图后，数据依然存在。
     - 可同时删除多个视图。
     DROP VIEW [IF EXISTS] view_name ...
+    - 级联删除
+    DROP VIEW <视图名> [ CASCADE ]
+    用CASCADE级联删除语句把该视图和由它导出的所有视图一起删除。
+    基本表删除之后，基本表导出的视图均无法使用，但是视图的定义没有从字典中被删除，需要显示删除
 -- 修改视图结构
     - 一般不修改视图，因为不是所有的更新视图都会映射到表上。
     ALTER VIEW view_name [(column_list)] AS select_statement
 -- 视图作用
     1. 简化业务逻辑
     2. 对客户端隐藏真实的表结构
+    3. 视图使用户能以多种角度看待同一数据
+    4. 视图对重构数据库提供了一定程度的逻辑独立性
+    5. 视图能够对机密数据提供安全保护
+    6. 适当利用视图可以更清晰地表达查询
 -- 视图算法(ALGORITHM)
     MERGE       合并
         将视图的查询语句，与外部查询需要先合并再执行！
@@ -1014,7 +1064,7 @@ BEGIN
 END
 ```
 
-### 用户和权限管理
+### 用户和权限管理(数据库安全)
 
 
 
@@ -1660,4 +1710,6 @@ inner join user_profile as up
 on up.device_id=qpd.device_id and up.university='浙江大学'
 order by question_id
 ```
+
+
 
